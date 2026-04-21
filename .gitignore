@@ -1,5 +1,17 @@
-venv/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .env
+venv/
+data/
+ 
+# C++ compiled binary
+engine
+engine.exe
+ 
+# OS
 .DS_Store
+Thumbs.db
+ 
