@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./engine *)",
+      "Bash(python app.py)",
+      "Bash(curl http://localhost:5000/health)",
+      "Bash(python backend/app.py)",
+      "Bash(curl -X POST http://localhost:5000/predict -H \"Content-Type: application/json\" -d '{\"pixels\": [0.0]}')",
+      "Bash(python -c ' *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
+    ]
+  }
+}

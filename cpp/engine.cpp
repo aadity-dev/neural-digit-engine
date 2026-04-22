@@ -32,7 +32,7 @@
 // ─────────────────────────────────────────
 //  CONFIG — paths relative to this binary
 // ─────────────────────────────────────────
-const std::string WEIGHTS_DIR  = "../weights/";
+const std::string WEIGHTS_DIR  = "./weights/";
 const std::string FC1_W        = WEIGHTS_DIR + "fc1_weight.txt";
 const std::string FC1_B        = WEIGHTS_DIR + "fc1_bias.txt";
 const std::string FC2_W        = WEIGHTS_DIR + "fc2_weight.txt";
