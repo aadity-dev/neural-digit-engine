@@ -1,3 +1,5 @@
+print("Docker ML container working successfully!")
+exit()
 """
 Phase 1 — Train MLP on MNIST and export raw weights
 =====================================================
