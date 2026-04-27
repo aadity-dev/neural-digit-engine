@@ -1,30 +1,19 @@
 # Neural Digit Engine 🧠⚡
 
-A machine learning project that combines Python-based model training with a custom inference workflow, demonstrating applied AI concepts and system-level understanding.
+A machine learning-based digit recognition system with a modular architecture, combining model training and Docker-based containerization.
 
 ---
 
 ## 🚀 Overview
 
-This project focuses on building a digit recognition system using a trained model and executing predictions efficiently.
+This project demonstrates how to build and organize a digit recognition system using machine learning techniques and run it inside a Docker container.
 
-### Key Components:
+### Key Features:
 
-1. **Model Training**
-
-   * Built using Python and deep learning libraries
-   * Trained on digit datasets
-   * Weights saved for reuse
-
-2. **Inference Execution**
-
-   * Model inference executed through optimized pipeline
-   * Demonstrates how trained models are used in real applications
-
-3. **System Design**
-
-   * Organized modular structure (engine, backend, frontend)
-   * Separation of training and inference logic
+* Model training using Python
+* Organized project structure (backend, frontend, engine)
+* Docker containerization for reproducibility
+* Execution of ML pipeline inside container
 
 ---
 
@@ -40,11 +29,12 @@ neural-digit-engine/
 │── train.py
 │── requirements.txt
 │── Dockerfile
+│── screenshots/
 ```
 
 ---
 
-## ⚙️ Setup & Installation
+## ⚙️ Setup Instructions
 
 ### 1. Clone Repository
 
@@ -72,7 +62,7 @@ pip install -r requirements.txt
 
 ---
 
-### 4. Run Training Script
+### 4. Run Training
 
 ```bash
 python train.py
@@ -80,7 +70,7 @@ python train.py
 
 ---
 
-## 🐳 Docker Setup
+## 🐳 Docker Usage
 
 ### Build Docker Image
 
@@ -88,7 +78,9 @@ python train.py
 docker build -t digit-engine .
 ```
 
-### Run Container
+---
+
+### Run Docker Container
 
 ```bash
 docker run digit-engine
@@ -96,27 +88,41 @@ docker run digit-engine
 
 ---
 
-## 📸 Screenshots
+## 📸 Docker Execution Proof
 
-(Add your Docker screenshots here if needed)
+### 🔹 Docker Image Build
+
+![Build](screenshots/build.png)
+
+---
+
+### 🔹 Running Container
+
+![Run](screenshots/Container_run.png)
+
+---
+
+### 🔹 Docker PS Output
+
+![Docker PS](screenshots/docker_ps.png)
 
 ---
 
 ## 🧠 Key Learnings
 
-* Machine Learning workflow (training → inference)
-* Handling dependencies using Docker
-* Containerizing ML applications
-* Debugging real-world environment issues
+* Understanding ML workflow (training → execution)
+* Containerizing applications using Docker
+* Managing dependencies across environments
+* Debugging real-world issues like missing libraries and port conflicts
 
 ---
 
 ## 🎯 Conclusion
 
-This project demonstrates how machine learning models can be structured, executed, and containerized for reproducibility and deployment.
+This project demonstrates how a machine learning application can be structured and containerized for consistent execution across systems.
 
 ---
 
 ## 👨‍💻 Author
 
-Aditya
+Aditya 
