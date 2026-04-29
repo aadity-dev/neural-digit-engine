@@ -35,9 +35,20 @@ def index():
 # Health check
 @app.route('/health', methods=['GET'])
 def health():
+    engine_exists = os.path.isfile(ENGINE_PATH)
+    # Attempt to compile if missing
+    if not engine_exists:
+        cpp_source = os.path.join(ROOT_DIR, 'cpp', 'engine.cpp')
+        if os.path.isfile(cpp_source):
+            try:
+                subprocess.run(['g++', '-O3', cpp_source, '-o', ENGINE_PATH], check=True)
+                engine_exists = True
+            except Exception as e:
+                pass
+
     return jsonify({
         'status' : 'ok',
-        'engine' : 'found' if os.path.isfile(ENGINE_PATH) else 'missing',
+        'engine' : 'found' if engine_exists else 'missing',
         'frontend': os.path.isdir(FRONTEND_DIR)
     })
 
@@ -52,6 +63,16 @@ def predict():
         pixels = data['pixels']
         if len(pixels) != 784:
             return jsonify({'error': f'Expected 784 pixels, got {len(pixels)}'}), 400
+
+        if not os.path.isfile(ENGINE_PATH):
+            cpp_source = os.path.join(ROOT_DIR, 'cpp', 'engine.cpp')
+            if os.path.isfile(cpp_source):
+                try:
+                    subprocess.run(['g++', '-O3', cpp_source, '-o', ENGINE_PATH], check=True)
+                except Exception as e:
+                    return jsonify({'error': f'Failed to compile engine: {str(e)}'}), 500
+            else:
+                return jsonify({'error': f'Engine source not found at {cpp_source}'}), 500
 
         if not os.path.isfile(ENGINE_PATH):
             return jsonify({'error': f'Engine not found at {ENGINE_PATH}'}), 500
