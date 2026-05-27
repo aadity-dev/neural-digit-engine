@@ -1,20 +1,16 @@
-Phase         : 3
-Test Accuracy : 98.45%
-Epochs run    : 18
-Batch Size    : 128
-LR schedule   : CosineAnnealing (LR=0.001 → 1e-5)
-Label smooth  : 0.1
-Architecture  : 784 → BN+ReLU(256) → BN+ReLU(128) → 10
-Augmentation  : rotation=±15°, translate=±10%, scale=±15%, shear=5°, ElasticTransform
+Phase         : 4 (CNN)
+Test Accuracy : 99.54%
+Architecture  : Conv(32) → Conv(64) → MaxPool → FC(128) → 10
+Parameters    : 422,090
 
 Per-digit accuracy:
-  digit 0: 99.29%
+  digit 0: 99.80%
   digit 1: 99.47%
-  digit 2: 98.64%
-  digit 3: 99.11%
-  digit 4: 97.86%
-  digit 5: 98.43%
-  digit 6: 98.12%
-  digit 7: 98.44%
-  digit 8: 98.15%
-  digit 9: 96.83%
+  digit 2: 99.81%
+  digit 3: 99.70%
+  digit 4: 99.49%
+  digit 5: 98.88%
+  digit 6: 99.69%
+  digit 7: 99.51%
+  digit 8: 99.90%
+  digit 9: 99.11%

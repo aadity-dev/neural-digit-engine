@@ -1,20 +1,31 @@
 """
-Phase 3 — train.py
+Phase 4 — train.py  (CNN upgrade)
 ================================================================
-Upgrades over Phase 2:
-  - Stronger augmentation: elastic distortion + scale variation
-    to better match how humans actually draw digits
-  - Batch Normalisation after each layer (more stable training)
-  - Label smoothing (CrossEntropy eps=0.1) — prevents overconfidence
-  - Cosine annealing LR schedule instead of StepLR
-  - Early stopping (patience=5) — saves best weights automatically
-  - Per-class accuracy report — see exactly which digits still fail
-  - Saves best checkpoint as weights/best_model.pt for inspection
+Architecture:
+  Input  : 1 × 28 × 28
+  Conv1  : 32 filters, 3×3, padding=1  → 32 × 28 × 28  + ReLU + BN
+  Conv2  : 64 filters, 3×3, padding=1  → 64 × 28 × 28  + ReLU + BN
+  Pool   : MaxPool 2×2                  → 64 × 14 × 14
+  Dropout: 0.25
+  Flatten: 64 × 7 × 7 = 3136
+  FC1    : 12544 → 128                  + ReLU + BN + Dropout(0.5)
+  FC2    : 128   → 10                   (logits)
 
-Architecture unchanged: 784 → BN+ReLU(256) → BN+ReLU(128) → 10
-(C++ engine.cpp unchanged — same weight files)
+Same augmentation as Phase 3.
+Same weight export format (.txt) — engine.cpp is rewritten for CNN.
+
+Exported files (weights/):
+  conv1_weight.txt   32 × 1 × 3 × 3  (each filter on one line, 9 values)
+  conv1_bias.txt     32
+  conv2_weight.txt   64 × 32 × 3 × 3
+  conv2_bias.txt     64
+  fc1_weight.txt     128 × 3136
+  fc1_bias.txt       128
+  fc2_weight.txt     10  × 128
+  fc2_bias.txt       10
 
 Run:  python train.py
+Then: cd cpp && g++ -O2 -std=c++17 -o engine engine.cpp
 """
 
 import torch
@@ -28,11 +39,11 @@ import os
 # ─────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────
-EPOCHS        = 25          # more epochs; early stopping handles overfitting
-BATCH_SIZE    = 128         # larger batch works better with batch norm
-LR            = 0.001
-PATIENCE      = 5           # stop if no improvement for 5 epochs
-LABEL_SMOOTH  = 0.1         # label smoothing epsilon
+EPOCHS       = 15
+BATCH_SIZE   = 64    # smaller batch = less RAM per step
+LR           = 0.001
+PATIENCE     = 5
+LABEL_SMOOTH = 0.1
 
 WEIGHTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'weights')
 os.makedirs(WEIGHTS_DIR, exist_ok=True)
@@ -41,18 +52,16 @@ MNIST_MEAN = 0.1307
 MNIST_STD  = 0.3081
 
 # ─────────────────────────────────────────
-# AUGMENTATION  (stronger than Phase 2)
+# AUGMENTATION  (same as Phase 3)
 # ─────────────────────────────────────────
-# ElasticTransform mimics natural pen/pencil stroke variation —
-# the single biggest boost for drawn-digit accuracy.
 train_transform = transforms.Compose([
     transforms.RandomAffine(
-        degrees=15,              # ±15° rotation (was ±10°)
-        translate=(0.10, 0.10), # ±10% shift    (was ±8%)
-        scale=(0.85, 1.15),     # ±15% zoom — new in Phase 3
-        shear=5,                # slight shear  — new in Phase 3
+        degrees=15,
+        translate=(0.10, 0.10),
+        scale=(0.85, 1.15),
+        shear=5,
     ),
-    transforms.ElasticTransform(alpha=20.0, sigma=5.0),  # NEW: warps strokes naturally
+    transforms.ElasticTransform(alpha=20.0, sigma=5.0),
     transforms.ToTensor(),
     transforms.Normalize((MNIST_MEAN,), (MNIST_STD,))
 ])
@@ -63,51 +72,62 @@ test_transform = transforms.Compose([
 ])
 
 print("=" * 55)
-print("  Phase 3 — Neural Digit Engine Training")
+print("  Phase 4 — CNN Training")
+print("  Conv(32) → Conv(64) → Pool → FC(128) → 10")
 print("=" * 55)
-print("  Loading MNIST dataset...")
+print("  Loading MNIST...")
 
 train_data   = datasets.MNIST('./data', train=True,  download=True, transform=train_transform)
 test_data    = datasets.MNIST('./data', train=False, download=True, transform=test_transform)
 train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True,  num_workers=0)
 test_loader  = DataLoader(test_data,  batch_size=1000,        shuffle=False, num_workers=0)
 
-print(f"  Train samples : {len(train_data)}")
-print(f"  Test  samples : {len(test_data)}")
+print(f"  Train: {len(train_data)}  Test: {len(test_data)}\n")
 
 # ─────────────────────────────────────────
-# MODEL — same shape as Phase 2 + BatchNorm
+# MODEL
 # ─────────────────────────────────────────
-class MLP(nn.Module):
+class CNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(784, 256),
-            nn.BatchNorm1d(256),   # NEW: normalises activations per batch
+        self.features = nn.Sequential(
+            # Block 1
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),   # → 32×28×28
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128),
-            nn.BatchNorm1d(128),   # NEW
+            nn.MaxPool2d(2),                               # → 32×14×14
+            # Block 2
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),  # → 64×14×14
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.MaxPool2d(2),                               # → 64×7×7
+            nn.Dropout2d(0.25),
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(64 * 7 * 7, 128),                   # 3136 → 128 (4x smaller)
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(128, 10),
         )
 
     def forward(self, x):
-        return self.net(x.view(-1, 784))
+        x = self.features(x)
+        x = x.flatten(1)
+        return self.classifier(x)
 
-model     = MLP()
-# Label smoothing: instead of hard 0/1 targets, uses 0.05/0.95
-# prevents the model from being overconfident on ambiguous digits
+model     = CNN()
+total_params = sum(p.numel() for p in model.parameters())
+print(f"  Parameters: {total_params:,}")
+
 criterion = nn.CrossEntropyLoss(label_smoothing=LABEL_SMOOTH)
 optimizer = optim.Adam(model.parameters(), lr=LR)
-# Cosine annealing: smoothly decays LR → 0 over training
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
 
 # ─────────────────────────────────────────
-# TRAINING LOOP with early stopping
+# TRAINING LOOP
 # ─────────────────────────────────────────
-print(f"\n  Training for up to {EPOCHS} epochs (patience={PATIENCE})...\n")
+print(f"  Training for up to {EPOCHS} epochs (patience={PATIENCE})...\n")
 
 best_acc      = 0.0
 patience_left = PATIENCE
@@ -149,17 +169,17 @@ for epoch in range(1, EPOCHS + 1):
           f"acc={acc:.2f}%  lr={lr_now:.6f}{marker}")
 
     if patience_left == 0:
-        print(f"\n  Early stopping at epoch {epoch} (no improvement for {PATIENCE} epochs)")
+        print(f"\n  Early stopping at epoch {epoch}")
         break
 
 print(f"\n  Best test accuracy: {best_acc:.2f}%")
 
 # ─────────────────────────────────────────
-# PER-CLASS ACCURACY REPORT
+# PER-DIGIT REPORT
 # ─────────────────────────────────────────
-print("\n  Per-digit accuracy (best model):")
 model.load_state_dict(best_state)
 model.eval()
+print("\n  Per-digit accuracy:")
 
 class_correct = [0] * 10
 class_total   = [0] * 10
@@ -170,8 +190,6 @@ with torch.no_grad():
             class_total[label]   += 1
             class_correct[label] += int(pred == label)
 
-worst_digit = -1
-worst_acc   = 101.0
 for d in range(10):
     dacc = 100 * class_correct[d] / class_total[d]
     bar  = '█' * int(dacc / 2)
@@ -179,72 +197,78 @@ for d in range(10):
     print(f"    {d}: {dacc:5.2f}%  {bar}{flag}")
 
 # ─────────────────────────────────────────
-# EXPORT WEIGHTS (same format → C++ unchanged)
+# EXPORT WEIGHTS
+# BN is folded into preceding Conv/Linear
+# so C++ engine needs no BN logic.
 # ─────────────────────────────────────────
-def save_weight(tensor, filename):
-    arr  = tensor.detach().numpy()
-    path = os.path.join(WEIGHTS_DIR, filename)
-    with open(path, 'w') as f:
-        if arr.ndim == 1:
-            for v in arr:
-                f.write(f"{v:.8f}\n")
-        else:
-            for row in arr:
-                f.write(' '.join(f"{v:.8f}" for v in row) + '\n')
-    print(f"  Saved {filename:25s} shape={arr.shape}")
-
-print("\n  Exporting weights...")
-
-# BatchNorm adds 4 extra param tensors per layer (weight, bias, mean, var)
-# The C++ engine only uses fc weights/biases — BatchNorm is fused in here
-# by extracting the effective weight/bias after BN folding.
-# Layers in self.net:  0=Linear, 1=BN, 2=ReLU, 3=Drop, 4=Linear, 5=BN, ...
-
-def fold_bn(linear: nn.Linear, bn: nn.BatchNorm1d):
-    """
-    Fold BatchNorm into the preceding Linear layer so C++ engine
-    needs no changes. After folding:
-       y = W_eff @ x + b_eff
-       W_eff = gamma / std  *  W
-       b_eff = gamma / std  * (b - mean) + beta
-    """
-    W   = linear.weight.detach()          # (out, in)
-    b   = linear.bias.detach()            # (out,)
-    gamma  = bn.weight.detach()           # (out,)
-    beta   = bn.bias.detach()             # (out,)
-    mean   = bn.running_mean.detach()     # (out,)
-    var    = bn.running_var.detach()      # (out,)
-    eps    = bn.eps
-
-    std    = (var + eps).sqrt()           # (out,)
-    scale  = gamma / std                  # (out,)
-
-    W_eff  = W * scale.unsqueeze(1)       # broadcast over input dim
+def fold_bn_conv(conv: nn.Conv2d, bn: nn.BatchNorm2d):
+    """Fold BN into Conv2d. Returns (W_eff, b_eff)."""
+    W      = conv.weight.detach()        # (out, in, kH, kW)
+    b      = conv.bias.detach() if conv.bias is not None else torch.zeros(conv.out_channels)
+    gamma  = bn.weight.detach()
+    beta   = bn.bias.detach()
+    mean   = bn.running_mean.detach()
+    var    = bn.running_var.detach()
+    std    = (var + bn.eps).sqrt()
+    scale  = gamma / std                 # (out,)
+    W_eff  = W * scale.view(-1, 1, 1, 1)
     b_eff  = scale * (b - mean) + beta
-
     return W_eff, b_eff
 
-net = model.net
-# fc1 = net[0], bn1 = net[1]
-# fc2 = net[4], bn2 = net[5]
-# fc3 = net[8]
-W1, b1 = fold_bn(net[0], net[1])
-W2, b2 = fold_bn(net[4], net[5])
-W3     = net[8].weight.detach()
-b3     = net[8].bias.detach()
+def fold_bn_linear(linear: nn.Linear, bn: nn.BatchNorm1d):
+    """Fold BN into Linear. Returns (W_eff, b_eff)."""
+    W      = linear.weight.detach()
+    b      = linear.bias.detach()
+    gamma  = bn.weight.detach()
+    beta   = bn.bias.detach()
+    mean   = bn.running_mean.detach()
+    var    = bn.running_var.detach()
+    std    = (var + bn.eps).sqrt()
+    scale  = gamma / std
+    W_eff  = W * scale.unsqueeze(1)
+    b_eff  = scale * (b - mean) + beta
+    return W_eff, b_eff
 
-save_weight(W1, 'fc1_weight.txt')   # (256, 784)
-save_weight(b1, 'fc1_bias.txt')     # (256,)
-save_weight(W2, 'fc2_weight.txt')   # (128, 256)
-save_weight(b2, 'fc2_bias.txt')     # (128,)
-save_weight(W3, 'fc3_weight.txt')   # (10,  128)
-save_weight(b3, 'fc3_bias.txt')     # (10,)
+def save_flat(tensor, filename):
+    """Save any tensor as a flat list of floats, one per line."""
+    arr  = tensor.detach().numpy().flatten()
+    path = os.path.join(WEIGHTS_DIR, filename)
+    with open(path, 'w') as f:
+        for v in arr:
+            f.write(f"{v:.8f}\n")
+    print(f"  Saved {filename:28s}  elements={len(arr):>8,}  shape={tuple(tensor.shape)}")
 
-# Save best model checkpoint
-torch.save(best_state, os.path.join(WEIGHTS_DIR, 'best_model.pt'))
-print(f"  Saved best_model.pt")
+print("\n  Exporting weights (BN folded)...")
 
-# verification sample
+# features: [Conv2d, BN2d, ReLU, MaxPool2d, Conv2d, BN2d, ReLU, MaxPool2d, Dropout2d]
+#            0       1     2     3          4       5     6     7            8
+conv1_W, conv1_b = fold_bn_conv(model.features[0], model.features[1])
+conv2_W, conv2_b = fold_bn_conv(model.features[4], model.features[5])
+
+# classifier: [Linear, BN1d, ReLU, Dropout, Linear]
+#              0       1     2     3        4
+fc1_W, fc1_b = fold_bn_linear(model.classifier[0], model.classifier[1])
+fc2_W = model.classifier[4].weight.detach()
+fc2_b = model.classifier[4].bias.detach()
+
+save_flat(conv1_W, 'conv1_weight.txt')   # 32×1×3×3  = 288 values
+save_flat(conv1_b, 'conv1_bias.txt')     # 32
+save_flat(conv2_W, 'conv2_weight.txt')   # 64×32×3×3 = 18432 values
+save_flat(conv2_b, 'conv2_bias.txt')     # 64
+save_flat(fc1_W,   'fc1_weight.txt')     # 128×12544
+save_flat(fc1_b,   'fc1_bias.txt')       # 128
+save_flat(fc2_W,   'fc2_weight.txt')     # 10×128
+save_flat(fc2_b,   'fc2_bias.txt')       # 10
+
+# remove old MLP-only files so engine doesn't accidentally load them
+for old in ['fc3_weight.txt', 'fc3_bias.txt']:
+    p = os.path.join(WEIGHTS_DIR, old)
+    if os.path.exists(p):
+        os.remove(p)
+        print(f"  Removed old {old}")
+
+# save checkpoint + verification sample
+torch.save(best_state, os.path.join(WEIGHTS_DIR, 'best_model_cnn.pt'))
 sample_img, sample_lbl = test_data[0]
 pixels = sample_img.view(-1).numpy()
 with open(os.path.join(WEIGHTS_DIR, 'test_image.txt'), 'w') as f:
@@ -254,19 +278,15 @@ with open(os.path.join(WEIGHTS_DIR, 'test_label.txt'), 'w') as f:
     f.write(str(sample_lbl) + '\n')
 
 with open(os.path.join(WEIGHTS_DIR, 'accuracy.txt'), 'w') as f:
-    f.write(f"Phase         : 3\n")
+    f.write(f"Phase         : 4 (CNN)\n")
     f.write(f"Test Accuracy : {best_acc:.2f}%\n")
-    f.write(f"Epochs run    : {epoch}\n")
-    f.write(f"Batch Size    : {BATCH_SIZE}\n")
-    f.write(f"LR schedule   : CosineAnnealing (LR={LR} → 1e-5)\n")
-    f.write(f"Label smooth  : {LABEL_SMOOTH}\n")
-    f.write(f"Architecture  : 784 → BN+ReLU(256) → BN+ReLU(128) → 10\n")
-    f.write(f"Augmentation  : rotation=±15°, translate=±10%, scale=±15%, shear=5°, ElasticTransform\n")
+    f.write(f"Architecture  : Conv(32) → Conv(64) → MaxPool → FC(128) → 10\n")
+    f.write(f"Parameters    : {total_params:,}\n")
     f.write("\nPer-digit accuracy:\n")
     for d in range(10):
         dacc = 100 * class_correct[d] / class_total[d]
         f.write(f"  digit {d}: {dacc:.2f}%\n")
 
-print("  Saved accuracy.txt")
-print("\n  Phase 3 training complete!")
+print("\n  Phase 4 CNN training complete!")
+print(f"  Best accuracy: {best_acc:.2f}%")
 print("=" * 55)
